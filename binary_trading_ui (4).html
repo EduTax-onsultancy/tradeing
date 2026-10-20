@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ProTrade - Binary Options</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- TradingView Lightweight Charts v4 -->
+    <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        :root {
+            --bg-dark: #0b0e11;
+            --panel-bg: #181a20;
+            --text-main: #eaecef;
+            --color-up: #0ecb81;
+            --color-down: #f6465d;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            /* 100dvh ensures it fits mobile screens perfectly without hiding behind nav bars */
+            height: 100dvh; 
+            overscroll-behavior-y: contain; 
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Animations */
+        .fade-in { animation: fadeIn 0.2s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        .slide-up { animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+        /* Chart Area - flex-grow allows it to take remaining space, min-height 0 stops overflow */
+        #chart-container {
+            position: relative;
+            flex-grow: 1;
+            min-height: 0; 
+            width: 100%;
+        }
+
+        /* Input styling */
+        input[type="number"]::-webkit-inner-spin-button, 
+        input[type="number"]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; margin: 0; 
+        }
+        select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
+        
+        /* Modals */
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="text-sm selection:bg-gray-700">
+
+    <div id="auth-screen" class="fixed inset-0 z-[100] bg-[#0b0e11] flex flex-col items-center justify-center p-4 transition-opacity duration-300">
+        <div class="w-full max-w-sm bg-[#181a20] border border-gray-800 rounded-xl p-6 shadow-2xl">
+            <div class="text-center mb-6">
+                <h1 class="text-3xl font-bold text-yellow-500 tracking-wider">ProTrade</h1>
+                <p class="text-gray-400 text-xs mt-1">Mobile Trading Platform</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex border-b border-gray-800 mb-6">
+                <button onclick="switchAuthTab('login')" id="tab-login" class="flex-1 py-2 text-yellow-500 font-bold border-b-2 border-yellow-500 transition">Login</button>
+                <button onclick="switchAuthTab('register')" id="tab-register" class="flex-1 py-2 text-gray-500 font-bold border-b-2 border-transparent transition hover:text-gray-300">Register</button>
+            </div>
+
+            <!-- Login Form -->
+            <div id="form-login" class="flex flex-col gap-4">
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Mobile Number</label>
+                    <input type="tel" id="login-phone" placeholder="Enter mobile number" class="w-full bg-gray-900 text-white p-3 rounded border border-gray-700 outline-none focus:border-yellow-500 transition">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Password</label>
+                    <input type="password" id="login-pass" placeholder="Enter password" class="w-full bg-gray-900 text-white p-3 rounded border border-gray-700 outline-none focus:border-yellow-500 transition">
+                </div>
+                <div class="text-right">
+                    <button onclick="forgotPassword()" class="text-xs text-yellow-500 hover:underline">Forgot Password?</button>
+                </div>
+                <button onclick="doLogin()" class="w-full bg-yellow-500 text-black font-bold py-3 rounded hover:bg-yellow-600 transition active:scale-95 mt-2">Login to Trade</button>
+            </div>
+
+            <!-- Register Form -->
+            <div id="form-register" class="hidden flex-col gap-4">
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Mobile Number</label>
+                    <input type="tel" id="reg-phone" placeholder="10-digit mobile number" class="w-full bg-gray-900 text-white p-3 rounded border border-gray-700 outline-none focus:border-yellow-500 transition">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Create Password</label>
+                    <input type="password" id="reg-pass" placeholder="Create a strong password" class="w-full bg-gray-900 text-white p-3 rounded border border-gray-700 outline-none focus:border-yellow-500 transition">
+                </div>
+                <button onclick="doRegister()" class="w-full bg-[#0ecb81] text-white font-bold py-3 rounded hover:bg-[#0b9e65] transition active:scale-95 mt-4 shadow-[0_4px_0_#0a8253] active:shadow-none active:translate-y-1">Create Account</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="reg-success-modal" class="hidden fixed inset-0 z-[110] modal-overlay flex items-center justify-center p-4 fade-in">
+        <div class="bg-[#181a20] border border-gray-700 rounded-xl w-full max-w-sm p-6 text-center slide-up">
+            <div class="w-16 h-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2">Account Created!</h3>
+            <p class="text-gray-400 text-sm mb-4">Please save your login details safely.</p>
+            
+            <div class="bg-gray-900 p-4 rounded-lg border border-gray-700 mb-6 text-left">
+                <div class="mb-2">
+                    <span class="text-xs text-gray-500">User ID / Mobile:</span>
+                    <div id="show-reg-phone" class="font-bold text-white text-lg tracking-wide"></div>
+                </div>
+                <div>
+                    <span class="text-xs text-gray-500">Password:</span>
+                    <div id="show-reg-pass" class="font-bold text-yellow-500 text-lg tracking-wide"></div>
+                </div>
+            </div>
+
+            <button onclick="closeRegSuccess()" class="w-full bg-yellow-500 text-black font-bold py-3 rounded hover:bg-yellow-600 transition active:scale-95">Continue to Login</button>
+        </div>
+    </div>
+
+    <header class="flex items-center justify-between px-3 py-2 bg-[#181a20] border-b border-gray-800 shrink-0">
+        <!-- Asset Selector -->
+        <button onclick="toggleModal('asset-modal')" class="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 px-2 py-1.5 rounded-lg transition active:scale-95">
+            <span id="current-asset-name" class="font-bold text-white text-sm sm:text-base">BTC/USD</span>
+            <span class="text-[10px] text-green-500 bg-green-500/20 px-1 rounded">85%</span>
+            <span class="text-gray-400 text-xs">▼</span>
+        </button>
+
+        <!-- Account Balance & Deposit / Withdraw -->
+        <div class="flex items-center gap-1.5">
+            <div onclick="toggleModal('account-modal')" class="cursor-pointer text-right bg-gray-800 px-2 py-1 rounded-lg border border-gray-700 active:bg-gray-700">
+                <div id="acc-type-label" class="text-[9px] uppercase text-yellow-500 font-bold tracking-wider">Demo ▼</div>
+                <div id="balance-display" class="font-bold text-white text-sm leading-tight">$10,000.00</div>
+            </div>
+            <div class="flex flex-col gap-1">
+                <button onclick="toggleModal('deposit-modal')" class="bg-yellow-500 text-black font-bold px-2 py-0.5 rounded transition active:scale-95 text-[10px]">
+                    Deposit
+                </button>
+                <button onclick="toggleModal('withdraw-modal')" class="bg-gray-700 text-white font-bold px-2 py-0.5 rounded transition active:scale-95 text-[10px] border border-gray-600">
+                    Withdraw
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main id="chart-container" class="bg-[#0b0e11] flex-1 min-h-0 relative">
+        <div id="active-trades-overlay" class="absolute top-2 left-2 z-10 flex flex-col gap-2 pointer-events-none w-48"></div>
+        <div id="sim-badge" class="hidden absolute bottom-2 right-2 z-10 bg-red-500/20 text-red-500 border border-red-500/50 text-[10px] px-2 py-1 rounded">
+            SIMULATION MODE
+        </div>
+    </main>
+
+    <footer class="bg-[#181a20] px-2 py-2 sm:py-3 border-t border-gray-800 shrink-0 z-20">
+        <div class="flex flex-col gap-2 max-w-lg mx-auto">
+            
+            <div class="flex gap-2">
+                <!-- Time Input -->
+                <div class="flex-1 bg-gray-800 rounded-lg p-1 border border-gray-700 flex flex-col justify-center">
+                    <div class="text-[9px] text-gray-400 text-center mb-0.5 font-semibold">TIME (SEC)</div>
+                    <div class="flex items-center justify-between px-1">
+                        <button onclick="adjustTime(-5)" class="w-6 h-6 bg-gray-700 rounded text-white font-bold active:bg-gray-600 flex items-center justify-center">-</button>
+                        <input type="number" id="trade-time" value="15" min="5" max="300" class="bg-transparent text-white font-bold text-sm text-center outline-none w-10">
+                        <button onclick="adjustTime(5)" class="w-6 h-6 bg-gray-700 rounded text-white font-bold active:bg-gray-600 flex items-center justify-center">+</button>
+                    </div>
+                </div>
+
+                <!-- Investment Input -->
+                <div class="flex-1 bg-gray-800 rounded-lg p-1 border border-gray-700 flex flex-col justify-center">
+                    <div class="text-[9px] text-gray-400 text-center mb-0.5 font-semibold">INVESTMENT ($)</div>
+                    <div class="flex items-center justify-between px-1">
+                        <button onclick="adjustAmount(-10)" class="w-6 h-6 bg-gray-700 rounded text-white font-bold active:bg-gray-600 flex items-center justify-center">-</button>
+                        <input type="number" id="trade-amount" value="50" min="1" class="bg-transparent text-white font-bold text-sm text-center outline-none w-12">
+                        <button onclick="adjustAmount(10)" class="w-6 h-6 bg-gray-700 rounded text-white font-bold active:bg-gray-600 flex items-center justify-center">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Call & Put Buttons -->
+            <div class="flex gap-2">
+                <button onclick="placeTrade('CALL')" class="flex-1 bg-[#0ecb81] active:bg-[#0b9e65] text-white rounded-lg py-2 flex flex-col items-center transition shadow-[0_3px_0_#0a8253] active:shadow-none active:translate-y-1">
+                    <span class="font-bold text-base tracking-wide flex items-center gap-1">
+                        CALL <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 15l7-7 7 7"></path></svg>
+                    </span>
+                </button>
+                
+                <button onclick="placeTrade('PUT')" class="flex-1 bg-[#f6465d] active:bg-[#c9384b] text-white rounded-lg py-2 flex flex-col items-center transition shadow-[0_3px_0_#b52a3a] active:shadow-none active:translate-y-1">
+                    <span class="font-bold text-base tracking-wide flex items-center gap-1">
+                        PUT <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"></path></svg>
+                    </span>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed top-14 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-2 w-[90%] max-w-sm pointer-events-none"></div>
+
+    <div id="deposit-modal" class="hidden fixed inset-0 modal-overlay z-40 flex items-center justify-center fade-in">
+        <div class="bg-[#181a20] border border-gray-700 rounded-xl w-[90%] max-w-sm p-5 slide-up">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-white">Deposit Funds</h3>
+                <button onclick="toggleModal('deposit-modal')" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="flex flex-col gap-4">
+                <div class="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <h4 class="text-yellow-500 font-bold mb-2">Practice Account</h4>
+                    <button onclick="addFunds('demo', 10000)" class="w-full bg-transparent border border-yellow-500 text-yellow-500 font-bold py-2 rounded hover:bg-yellow-500/10">
+                        + $10,000 Demo Money
+                    </button>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-lg border border-[#0ecb81]/30">
+                    <h4 class="text-[#0ecb81] font-bold mb-2">Real Account</h4>
+                    <div class="flex gap-2">
+                        <button onclick="addFunds('real', 100)" class="flex-1 bg-[#0ecb81] text-white font-bold py-2 rounded hover:bg-[#0b9e65]">+$100</button>
+                        <button onclick="addFunds('real', 500)" class="flex-1 bg-[#0ecb81] text-white font-bold py-2 rounded hover:bg-[#0b9e65]">+$500</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="withdraw-modal" class="hidden fixed inset-0 modal-overlay z-40 flex items-center justify-center fade-in">
+        <div class="bg-[#181a20] border border-gray-700 rounded-xl w-[90%] max-w-sm p-5 slide-up">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-white">Withdraw Funds</h3>
+                <button onclick="toggleModal('withdraw-modal')" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="flex flex-col gap-3">
+                <select id="withdraw-method" class="w-full bg-gray-900 text-white p-2 rounded border border-gray-700 outline-none" onchange="toggleWithdrawFields()">
+                    <option value="upi">UPI Transfer</option>
+                    <option value="bank">Bank Transfer</option>
+                </select>
+                <div id="withdraw-upi-fields"><input type="text" placeholder="UPI ID" class="w-full bg-gray-900 text-white p-2 rounded border border-gray-700 outline-none"></div>
+                <div id="withdraw-bank-fields" class="hidden flex-col gap-2">
+                    <input type="text" placeholder="Account Number" class="w-full bg-gray-900 text-white p-2 rounded border border-gray-700 outline-none">
+                    <input type="text" placeholder="IFSC Code" class="w-full bg-gray-900 text-white p-2 rounded border border-gray-700 outline-none">
+                </div>
+                <input type="number" id="withdraw-amount" placeholder="Amount ($)" class="w-full bg-gray-900 text-white p-2 rounded border border-gray-700 outline-none">
+                <button onclick="processWithdrawal()" class="w-full bg-[#f6465d] text-white font-bold py-2 rounded hover:bg-[#c9384b] mt-2 active:scale-95 shadow-[0_4px_0_#b52a3a] active:shadow-none active:translate-y-1">Confirm Withdrawal</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="account-modal" class="hidden fixed inset-0 modal-overlay z-40 flex items-center justify-center fade-in">
+        <div class="bg-[#181a20] border border-gray-700 rounded-xl w-[90%] max-w-sm p-4 slide-up">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-white">Select Wallet</h3>
+                <button onclick="toggleModal('account-modal')" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="flex flex-col gap-3">
+                <div onclick="switchAccount('demo')" class="flex justify-between items-center bg-gray-800 p-3 rounded-lg cursor-pointer border-2 border-yellow-500">
+                    <div><div class="text-yellow-500 font-bold text-sm">Demo Wallet</div><div class="text-white font-bold text-lg" id="demo-bal-mod">$10,000.00</div></div>
+                </div>
+                <div onclick="switchAccount('real')" class="flex justify-between items-center bg-gray-800 p-3 rounded-lg cursor-pointer border-2 border-transparent hover:border-[#0ecb81]">
+                    <div><div class="text-[#0ecb81] font-bold text-sm">Real Wallet</div><div class="text-white font-bold text-lg" id="real-bal-mod">$0.00</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="asset-modal" class="hidden fixed inset-0 modal-overlay z-40 flex items-center justify-center fade-in">
+        <div class="bg-[#181a20] border border-gray-700 rounded-xl w-[90%] max-w-sm p-4 slide-up">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-white">Select Asset</h3>
+                <button onclick="toggleModal('asset-modal')" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="flex flex-col gap-2">
+                <div onclick="changeAsset('btcusdt', 'BTC/USD', 65000)" class="flex justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-lg cursor-pointer">
+                    <span class="font-bold text-white">BTC/USD</span><span class="text-[#0ecb81]">85%</span>
+                </div>
+                <div onclick="changeAsset('ethusdt', 'ETH/USD', 3500)" class="flex justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-lg cursor-pointer">
+                    <span class="font-bold text-white">ETH/USD</span><span class="text-[#0ecb81]">85%</span>
+                </div>
+                <div onclick="changeAsset('bnbusdt', 'BNB/USD', 600)" class="flex justify-between p-3 bg-gray-800 hover:bg-gray-700 rounded-lg cursor-pointer">
+                    <span class="font-bold text-white">BNB/USD</span><span class="text-[#0ecb81]">85%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global State & Local Storage Setup
+        window.usersDB = JSON.parse(localStorage.getItem('proTradeUsers')) || []; 
+        window.currentUser = null;
+        window.state = {
+            balances: { demo: 10000.00, real: 0.00 },
+            accountType: 'demo',
+            payoutRate: 0.85,
+            currentPrice: 0,
+            symbol: 'btcusdt',
+            assetName: 'BTC/USD',
+            trades: [],
+            tradeIdCounter: 0,
+            basePrice: 65000 
+        };
+
+        const formatMoney = (amount) => "$" + amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        const els = (id) => document.getElementById(id);
+
+        // Save data to browser memory (Replaces Firebase)
+        function saveLocalData() {
+            if(window.currentUser) {
+                let userIndex = window.usersDB.findIndex(u => u.phone === window.currentUser.phone);
+                if(userIndex !== -1) window.usersDB[userIndex].balances = window.state.balances;
+            }
+            localStorage.setItem('proTradeUsers', JSON.stringify(window.usersDB));
+            if(window.currentUser) {
+                localStorage.setItem('proTradeSession', window.currentUser.phone);
+            }
+        }
+
+        // Auto Login System
+        function checkAutoLogin() {
+            const savedSession = localStorage.getItem('proTradeSession');
+            if(savedSession) {
+                const user = window.usersDB.find(u => u.phone === savedSession);
+                if(user) {
+                    window.currentUser = user;
+                    window.state.balances = user.balances;
+                    els('auth-screen').classList.add('hidden');
+                    updateBalances();
+                    showToast("Welcome Back!", "success");
+                }
+            }
+        }
+
+        function updateBalances() {
+            els('balance-display').innerText = formatMoney(window.state.balances[window.state.accountType]);
+            els('demo-bal-mod').innerText = formatMoney(window.state.balances.demo);
+            els('real-bal-mod').innerText = formatMoney(window.state.balances.real);
+            
+            const accLabel = els('acc-type-label');
+            if(window.state.accountType === 'demo') {
+                accLabel.innerText = "Demo ▼";
+                accLabel.className = "text-[9px] uppercase text-yellow-500 font-bold tracking-wider";
+            } else {
+                accLabel.innerText = "Real ▼";
+                accLabel.className = "text-[9px] uppercase text-[#0ecb81] font-bold tracking-wider";
+            }
+        }
+
+        function switchAuthTab(tab) {
+            if(tab === 'login') {
+                els('form-login').classList.replace('hidden', 'flex');
+                els('form-register').classList.replace('flex', 'hidden');
+                els('tab-login').className = "flex-1 py-2 text-yellow-500 font-bold border-b-2 border-yellow-500 transition";
+                els('tab-register').className = "flex-1 py-2 text-gray-500 font-bold border-b-2 border-transparent transition hover:text-gray-300";
+            } else {
+                els('form-register').classList.replace('hidden', 'flex');
+                els('form-login').classList.replace('flex', 'hidden');
+                els('tab-register').className = "flex-1 py-2 text-yellow-500 font-bold border-b-2 border-yellow-500 transition";
+                els('tab-login').className = "flex-1 py-2 text-gray-500 font-bold border-b-2 border-transparent transition hover:text-gray-300";
+            }
+        }
+
+        function doRegister() {
+            const phone = els('reg-phone').value.trim();
+            const pass = els('reg-pass').value.trim();
+
+            if(phone.length < 5) return showToast("Enter a valid mobile number", "error");
+            if(pass.length < 4) return showToast("Password must be at least 4 characters", "error");
+            if(window.usersDB.find(u => u.phone === phone)) return showToast("Account already exists!", "error");
+            
+            window.usersDB.push({ phone, pass, balances: { demo: 10000.00, real: 0.00 } });
+            localStorage.setItem('proTradeUsers', JSON.stringify(window.usersDB));
+            
+            els('show-reg-phone').innerText = phone;
+            els('show-reg-pass').innerText = pass;
+            els('reg-success-modal').classList.remove('hidden');
+        }
+
+        function closeRegSuccess() {
+            els('reg-success-modal').classList.add('hidden');
+            switchAuthTab('login');
+        }
+
+        function doLogin() {
+            const phone = els('login-phone').value.trim();
+            const pass = els('login-pass').value.trim();
+
+            const validUser = window.usersDB.find(u => u.phone === phone && u.pass === pass);
+            if(validUser) {
+                window.currentUser = validUser;
+                window.state.balances = validUser.balances;
+                saveLocalData();
+                els('auth-screen').classList.add('opacity-0');
+                setTimeout(() => { els('auth-screen').classList.add('hidden'); updateBalances(); }, 300);
+            } else {
+                showToast("Invalid Mobile Number or Password", "error");
+            }
+        }
+
+        function toggleModal(id) { els(id).classList.toggle('hidden'); }
+        function switchAccount(type) { window.state.accountType = type; updateBalances(); toggleModal('account-modal'); }
+        
+        function addFunds(type, amount) {
+            if(type === 'demo') window.state.balances.demo = amount; 
+            else window.state.balances.real += amount;
+            updateBalances(); saveLocalData(); toggleModal('deposit-modal');
+            showToast(`+$${amount} added successfully!`, 'success');
+        }
+
+        function toggleWithdrawFields() {
+            if(els('withdraw-method').value === 'upi') {
+                els('withdraw-upi-fields').classList.remove('hidden'); els('withdraw-bank-fields').classList.add('hidden');
+            } else {
+                els('withdraw-upi-fields').classList.add('hidden'); els('withdraw-bank-fields').classList.remove('hidden'); els('withdraw-bank-fields').classList.add('flex');
+            }
+        }
+
+        function processWithdrawal() {
+            const amount = parseFloat(els('withdraw-amount').value);
+            if (isNaN(amount) || amount <= 0) return showToast("Invalid amount", "error");
+            if (amount > window.state.balances[window.state.accountType]) return showToast("Insufficient balance!", "error");
+
+            window.state.balances[window.state.accountType] -= amount;
+            updateBalances(); saveLocalData(); toggleModal('withdraw-modal');
+            showToast(`$${amount} Withdrawal successful!`, "success");
+        }
+
+        const chart = LightweightCharts.createChart(els('chart-container'), {
+            layout: { textColor: '#848e9c', background: { type: 'solid', color: '#0b0e11' } },
+            grid: { vertLines: { color: '#181a20' }, horzLines: { color: '#181a20' } },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            timeScale: { timeVisible: true, secondsVisible: true, borderVisible: false }
+        });
+        
+        const candlestickSeries = chart.addCandlestickSeries({ upColor: '#0ecb81', downColor: '#f6465d', borderVisible: false });
+        window.addEventListener('resize', () => chart.resize(els('chart-container').clientWidth, els('chart-container').clientHeight));
+
+        let ws; let simInterval;
+        async function loadDataAndConnect() {
+            try {
+                let res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${window.state.symbol.toUpperCase()}&interval=1s&limit=60`);
+                if (!res.ok) throw new Error("API Blocked");
+                let data = await res.json();
+                
+                let history = data.map(d => ({ time: Math.floor(d[0] / 1000), open: parseFloat(d[1]), high: parseFloat(d[2]), low: parseFloat(d[3]), close: parseFloat(d[4]) }));
+                candlestickSeries.setData(history);
+                window.state.currentPrice = history[history.length - 1].close;
+                
+                els('sim-badge').classList.add('hidden'); connectWebSocket();
+            } catch (error) {
+                els('sim-badge').classList.remove('hidden'); startSimulation();
+            }
+        }
+
+        function connectWebSocket() {
+            if(ws) ws.close();
+            ws = new WebSocket(`wss://stream.binance.com:9443/ws/${window.state.symbol}@kline_1s`);
+            ws.onmessage = function (event) {
+                const kline = JSON.parse(event.data).k;
+                const candle = { time: Math.floor(kline.t / 1000), open: parseFloat(kline.o), high: parseFloat(kline.h), low: parseFloat(kline.l), close: parseFloat(kline.c) };
+                candlestickSeries.update(candle); window.state.currentPrice = candle.close; updateActiveTradesUI();
+            };
+            ws.onerror = () => startSimulation();
+        }
+
+        function startSimulation() {
+            if(ws) ws.close(); if(simInterval) clearInterval(simInterval);
+            let lastPrice = window.state.basePrice; let lastTime = Math.floor(Date.now() / 1000);
+            let history = [];
+            for(let i = 60; i > 0; i--) {
+                let open = lastPrice; let close = open + (Math.random() - 0.5) * (open * 0.0005);
+                history.push({ time: lastTime - i, open, close, high: Math.max(open, close) + Math.random() * 2, low: Math.min(open, close) - Math.random() * 2 });
+                lastPrice = close;
+            }
+            candlestickSeries.setData(history); window.state.currentPrice = lastPrice;
+
+            simInterval = setInterval(() => {
+                let open = window.state.currentPrice; let close = open + (Math.random() - 0.5) * (open * 0.0004); 
+                let candle = { time: Math.floor(Date.now() / 1000), open, close, high: Math.max(open, close) + (Math.random() * (open*0.0001)), low: Math.min(open, close) - (Math.random() * (open*0.0001)) };
+                candlestickSeries.update(candle); window.state.currentPrice = close; updateActiveTradesUI();
+            }, 1000);
+        }
+
+        function adjustTime(step) { els('trade-time').value = Math.max(5, parseInt(els('trade-time').value) + step); }
+        function adjustAmount(step) { els('trade-amount').value = Math.max(1, parseInt(els('trade-amount').value) + step); }
+        function changeAsset(symbol, name, price) { window.state.symbol = symbol; window.state.assetName = name; window.state.basePrice = price; els('current-asset-name').innerText = name; candlestickSeries.setData([]); toggleModal('asset-modal'); loadDataAndConnect(); }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            let bg = type === 'success' ? 'border-[#0ecb81] text-[#0ecb81]' : type === 'error' ? 'border-[#f6465d] text-[#f6465d]' : 'border-blue-500 text-white';
+            toast.className = `p-3 rounded-r shadow-lg font-bold bg-gray-800 border-l-4 ${bg} fade-in text-sm`;
+            toast.innerHTML = `<span>${message}</span>`;
+            els('toast-container').appendChild(toast);
+            setTimeout(() => { toast.classList.add('opacity-0', 'transition-opacity'); setTimeout(() => toast.remove(), 300); }, 3000);
+        }
+
+        function placeTrade(direction) {
+            let amount = parseFloat(els('trade-amount').value); let timeSec = parseInt(els('trade-time').value);
+            if (isNaN(amount) || amount <= 0 || amount > window.state.balances[window.state.accountType]) return showToast("Invalid amount / Balance low", "error");
+
+            window.state.balances[window.state.accountType] -= amount; updateBalances(); saveLocalData();
+
+            const trade = { id: window.state.tradeIdCounter++, direction, entryPrice: window.state.currentPrice, amount, timeTotal: timeSec, timeLeft: timeSec, accType: window.state.accountType };
+            window.state.trades.push(trade); createTradeUI(trade); updateChartMarkers();
+
+            trade.timer = setInterval(() => {
+                trade.timeLeft--; let timeEl = els(`trade-${trade.id}-time`);
+                if(timeEl) timeEl.innerText = `${trade.timeLeft}s`;
+                if (trade.timeLeft <= 0) { clearInterval(trade.timer); resolveTrade(trade); }
+            }, 1000);
+        }
+
+        function createTradeUI(trade) {
+            const div = document.createElement('div'); div.id = `trade-${trade.id}`;
+            const isCall = trade.direction === 'CALL';
+            div.className = `bg-[#181a20] border-l-4 ${isCall ? 'border-[#0ecb81]' : 'border-[#f6465d]'} rounded p-2 text-xs flex justify-between shadow slide-up`;
+            div.innerHTML = `<div class="flex flex-col"><span class="font-bold text-white">${window.state.assetName}</span><span class="${isCall ? 'text-[#0ecb81]' : 'text-[#f6465d]'} font-bold">${isCall ? 'CALL' : 'PUT'} $${trade.amount}</span></div><div class="text-right"><div id="trade-${trade.id}-time" class="font-mono text-yellow-500">${trade.timeTotal}s</div><div id="trade-${trade.id}-status" class="text-gray-400 mt-1">Wait...</div></div>`;
+            els('active-trades-overlay').appendChild(div);
+        }
+
+        function updateChartMarkers() {
+            candlestickSeries.setMarkers(window.state.trades.map(t => ({ time: Math.floor(Date.now() / 1000), position: t.direction === 'CALL' ? 'belowBar' : 'aboveBar', color: t.direction === 'CALL' ? '#0ecb81' : '#f6465d', shape: t.direction === 'CALL' ? 'arrowUp' : 'arrowDown', text: `$${t.amount}` })));
+        }
+
+        function updateActiveTradesUI() {
+            window.state.trades.forEach(trade => {
+                const sEl = els(`trade-${trade.id}-status`); if(!sEl) return;
+                let win = (trade.direction === 'CALL' && window.state.currentPrice > trade.entryPrice) || (trade.direction === 'PUT' && window.state.currentPrice < trade.entryPrice);
+                if(window.state.currentPrice === trade.entryPrice) { sEl.innerText = "Tie"; sEl.className = "text-gray-400 font-bold mt-1"; }
+                else if(win) { sEl.innerText = `+$${(trade.amount * window.state.payoutRate).toFixed(2)}`; sEl.className = "text-[#0ecb81] font-bold mt-1"; }
+                else { sEl.innerText = `-$${trade.amount}`; sEl.className = "text-[#f6465d] font-bold mt-1"; }
+            });
+        }
+
+        function resolveTrade(trade) {
+            window.state.trades = window.state.trades.filter(t => t.id !== trade.id); updateChartMarkers();
+            let el = els(`trade-${trade.id}`); if(el) { el.classList.add('opacity-0'); setTimeout(() => el.remove(), 300); }
+
+            let win = (trade.direction === 'CALL' && window.state.currentPrice > trade.entryPrice) || (trade.direction === 'PUT' && window.state.currentPrice < trade.entryPrice);
+            if (win) {
+                let ret = trade.amount + (trade.amount * window.state.payoutRate); window.state.balances[trade.accType] += ret;
+                showToast(`WIN! +${formatMoney(ret - trade.amount)}`, 'success');
+            } else if (window.state.currentPrice === trade.entryPrice) {
+                window.state.balances[trade.accType] += trade.amount; showToast(`TIE! Refunded.`, 'info');
+            } else { showToast(`LOSS! -${formatMoney(trade.amount)}`, 'error'); }
+
+            if(window.state.accountType === trade.accType) updateBalances(); saveLocalData();
+        }
+
+        // Export globals & startup
+        window.switchAuthTab = switchAuthTab; window.doRegister = doRegister; window.closeRegSuccess = closeRegSuccess; window.doLogin = doLogin; window.toggleModal = toggleModal; window.switchAccount = switchAccount; window.addFunds = addFunds; window.toggleWithdrawFields = toggleWithdrawFields; window.processWithdrawal = processWithdrawal; window.changeAsset = changeAsset; window.adjustTime = adjustTime; window.adjustAmount = adjustAmount; window.placeTrade = placeTrade;
+        
+        checkAutoLogin(); loadDataAndConnect();
+    </script>
+</body>
+</html>
